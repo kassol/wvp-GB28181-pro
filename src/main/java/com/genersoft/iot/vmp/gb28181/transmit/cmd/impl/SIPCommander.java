@@ -249,6 +249,49 @@ public class SIPCommander implements ISIPCommander {
 	}
 
 	/**
+	 * 云台拉框放大
+	 * @param device 控制设备
+	 * @param channelId 预览通道
+	 * @param length 图像宽
+	 * @param width 图像高
+	 * @param midx 框中心 x
+	 * @param midy 框中心 y
+	 * @param lengthx 框宽
+	 * @param lengthy 框高
+	 */
+	@Override
+	public boolean zoomInRectCmd(Device device, String channelId, int length, int width, int midx, int midy, int lengthx, int lengthy) {
+		try {
+			StringBuffer ptzXml = new StringBuffer(200);
+			ptzXml.append("<?xml version=\"1.0\" ?>\r\n");
+			ptzXml.append("<Control>\r\n");
+			ptzXml.append("<CmdType>DeviceControl</CmdType>\r\n");
+			ptzXml.append("<SN>" + (int)((Math.random()*9+1)*100000) + "</SN>\r\n");
+			ptzXml.append("<DeviceID>" + channelId + "</DeviceID>\r\n");
+			ptzXml.append("<DragZoomIn>\r\n");
+			ptzXml.append("<Length>" + String.valueOf(length) + "</Length>\r\n");
+			ptzXml.append("<Width>" + String.valueOf(width) + "</Width>\r\n");
+			ptzXml.append("<MidPointX>" + String.valueOf(midx) + "</MidPointX>\r\n");
+			ptzXml.append("<MidPointY>" + String.valueOf(midy) + "</MidPointY>\r\n");
+			ptzXml.append("<LengthX>" + String.valueOf(lengthx) + "</LengthX>\r\n");
+			ptzXml.append("<LengthY>" + String.valueOf(lengthy) + "</LengthY>\r\n");
+			ptzXml.append("</DragZoomIn>\r\n");
+			ptzXml.append("</Control>\r\n");
+			String tm = Long.toString(System.currentTimeMillis());
+
+			CallIdHeader callIdHeader = device.getTransport().equals("TCP") ? tcpSipProvider.getNewCallId()
+					: udpSipProvider.getNewCallId();
+
+			Request request = headerProvider.createMessageRequest(device, ptzXml.toString(), "z9hG4bK-ViaPtz-" + tm, "FromPtz" + tm, null, callIdHeader);
+			transmitRequest(device, request);
+			return true;
+		} catch (SipException | ParseException | InvalidArgumentException e) {
+			e.printStackTrace();
+		}
+		return false;
+	}
+
+	/**
 	 * 前端控制，包括PTZ指令、FI指令、预置位指令、巡航指令、扫描指令和辅助开关指令
 	 * 
 	 * @param device  		控制设备

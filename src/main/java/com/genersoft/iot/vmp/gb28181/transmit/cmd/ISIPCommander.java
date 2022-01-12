@@ -67,6 +67,20 @@ public interface ISIPCommander {
      * @param zoomSpeed  镜头缩放速度
 	 */
 	boolean ptzCmd(Device device,String channelId,int leftRight, int upDown, int inOut, int moveSpeed, int zoomSpeed);
+
+
+	/**
+	 * 云台拉框放大
+	 * @param device 控制设备
+	 * @param channelId 预览通道
+	 * @param length 图像宽
+	 * @param width 图像高
+	 * @param midx 框中心 x
+	 * @param midy 框中心 y
+	 * @param lengthx 框宽
+	 * @param lengthy 框高
+	 */
+	boolean zoomInRectCmd(Device device, String channelId, int length, int width, int midx, int midy, int lengthx, int lengthy);
 	
 	/**
 	 * 前端控制，包括PTZ指令、FI指令、预置位指令、巡航指令、扫描指令和辅助开关指令

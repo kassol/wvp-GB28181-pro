@@ -108,6 +108,27 @@ public class PtzController {
 		return new ResponseEntity<String>("success",HttpStatus.OK);
 	}
 
+	@ApiOperation("拉框放大")
+	@ApiImplicitParams({
+			@ApiImplicitParam(name = "deviceId", value = "设备ID", dataTypeClass = String.class),
+			@ApiImplicitParam(name = "channelId", value = "通道ID", dataTypeClass = String.class),
+			@ApiImplicitParam(name = "length", value = "图像宽", dataTypeClass = Integer.class),
+			@ApiImplicitParam(name = "width", value = "图像高", dataTypeClass = Integer.class),
+			@ApiImplicitParam(name = "midx", value = "框中心 x", dataTypeClass = Integer.class),
+			@ApiImplicitParam(name = "midy", value = "框中心 y", dataTypeClass = Integer.class),
+			@ApiImplicitParam(name = "lengthx", value = "框宽", dataTypeClass = Integer.class),
+			@ApiImplicitParam(name = "lengthy", value = "框高", dataTypeClass = Integer.class),
+	})
+	@PostMapping("/zoom_in_rect/{deviceId}/{channelId}")
+	public ResponseEntity<String> zoomInRect(@PathVariable String deviceId,@PathVariable String channelId, int length, int width, int midx, int midy, int lengthx, int lengthy) {
+		if (logger.isDebugEnabled()) {
+			logger.debug(String.format("设备云台控制拉框放大 API调用，deviceId：%s ，channelId：%s ，cmdCode：%d parameter1：%d parameter2：%d",deviceId, channelId, length, width, midx, midy, lengthx, lengthy));
+		}
+		Device device = storager.queryVideoDevice(deviceId);
+		cmder.zoomInRectCmd(device, channelId, length, width, midx, midy, lengthx, lengthy);
+		return new ResponseEntity<String>("success",HttpStatus.OK);
+	}
+
 	@ApiOperation("通用前端控制命令")
 	@ApiImplicitParams({
 			@ApiImplicitParam(name = "deviceId", value = "设备ID", dataTypeClass = String.class),
