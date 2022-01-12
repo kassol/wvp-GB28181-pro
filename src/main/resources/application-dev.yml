@@ -88,6 +88,8 @@ logging:
 
 # [根据业务需求配置]
 user-settings:
+    # 是否开启接口鉴权
+    interface-authentication: false
     # 推流直播是否录制
     record-push-live: false
     auto-apply-play: false
