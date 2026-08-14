@@ -2,25 +2,22 @@ package com.genersoft.iot.vmp.gb28181.service.impl;
 
 import com.alibaba.fastjson2.JSON;
 import com.genersoft.iot.vmp.common.*;
-import com.genersoft.iot.vmp.common.enums.MediaStreamUtil;
 import com.genersoft.iot.vmp.conf.UserSetting;
-import com.genersoft.iot.vmp.gb28181.bean.Device;
-import com.genersoft.iot.vmp.gb28181.dao.DeviceChannelMapper;
-import com.genersoft.iot.vmp.gb28181.dao.DeviceMapper;
 import com.genersoft.iot.vmp.gb28181.service.IInviteStreamService;
-import com.genersoft.iot.vmp.media.event.media.MediaDepartureEvent;
 import com.genersoft.iot.vmp.service.bean.ErrorCallback;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ScanOptions;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.serializer.GenericToStringSerializer;
+import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,6 +27,22 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Service
 public class InviteStreamServiceImpl implements IInviteStreamService {
 
+    /**
+     * 仅当点播状态仍持有期望的SSRC时才删除，避免旧回调删除新点播的状态。
+     */
+    private static final DefaultRedisScript<Long> REMOVE_INVITE_BY_SSRC_SCRIPT = new DefaultRedisScript<>(
+            "local value = redis.call('HGET', KEYS[1], ARGV[1]); " +
+                    "if not value then return 0 end; " +
+                    "local ssrc = '\"ssrc\":' .. ARGV[2]; " +
+                    "if string.find(value, ssrc, 1, true) then " +
+                    "return redis.call('HDEL', KEYS[1], ARGV[1]) end; " +
+                    "return 0",
+            Long.class);
+
+    private static final RedisSerializer<String> STRING_SERIALIZER = RedisSerializer.string();
+
+    private static final RedisSerializer<Long> LONG_SERIALIZER = new GenericToStringSerializer<>(Long.class);
+
     private final Map<String, List<ErrorCallback<StreamInfo>>> inviteErrorCallbackMap = new ConcurrentHashMap<>();
 
     @Autowired
@@ -37,35 +50,6 @@ public class InviteStreamServiceImpl implements IInviteStreamService {
 
     @Autowired
     private UserSetting userSetting;
-
-    @Autowired
-    private DeviceMapper deviceMapper;
-
-    @Autowired
-    private DeviceChannelMapper deviceChannelMapper;
-
-    /**
-     * 流离开的处理
-     */
-    @Async
-    @EventListener
-    public void onApplicationEvent(MediaDepartureEvent event) {
-        if ("rtsp".equals(event.getSchema()) && MediaStreamUtil.isGB28181(event.getApp(), event.getStream())) {
-            InviteInfo inviteInfo = getInviteInfoByStream(null, event.getStream());
-            if (inviteInfo != null && (inviteInfo.getType() == InviteSessionType.PLAY || inviteInfo.getType() == InviteSessionType.PLAYBACK)) {
-                try {
-                    removeInviteInfo(inviteInfo);
-                    Device device = deviceMapper.getDeviceByDeviceId(inviteInfo.getDeviceId());
-                    if (device != null) {
-                        deviceChannelMapper.stopPlayById(inviteInfo.getChannelId());
-                    }
-                } catch (Exception e) {
-                    log.error("[流离开] 清理Invite异常: deviceId={}, channelId={}, stream={}",
-                            inviteInfo.getDeviceId(), inviteInfo.getChannelId(), inviteInfo.getStream(), e);
-                }
-            }
-        }
-    }
 
     @Override
     public void updateInviteInfo(InviteInfo inviteInfo) {
@@ -226,6 +210,24 @@ public class InviteStreamServiceImpl implements IInviteStreamService {
     @Override
     public void removeInviteInfoByDeviceAndChannel(InviteSessionType inviteSessionType, Integer channelId) {
         removeInviteInfo(inviteSessionType, channelId, null);
+    }
+
+    @Override
+    public boolean removeInviteInfoIfSsrcMatches(InviteSessionType type, Integer channelId, String stream, String expectedSsrc) {
+        if (expectedSsrc == null || stream == null) {
+            log.info("[移除Invite信息] 缺少会话标识, 跳过删除, channelId: {}, stream: {}", channelId, stream);
+            return false;
+        }
+        // key格式与updateInviteInfo一致，直接定位精确字段，不经过通配扫描
+        String objectKey = type + ":" + channelId + ":" + stream;
+        Long removed = redisTemplate.execute(REMOVE_INVITE_BY_SSRC_SCRIPT, STRING_SERIALIZER, LONG_SERIALIZER,
+                Collections.singletonList(VideoManagerConstants.INVITE_PREFIX), objectKey,
+                JSON.toJSONString(expectedSsrc));
+        if (removed == null || removed == 0) {
+            log.info("[移除Invite信息] 记录不存在或SSRC不匹配, 跳过删除, key: {}, 期望: {}", objectKey, expectedSsrc);
+            return false;
+        }
+        return true;
     }
 
     @Override

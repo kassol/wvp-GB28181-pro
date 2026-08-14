@@ -57,6 +57,14 @@ public class SIPSender {
     }
 
     public void transmitRequest(String ip, Message message, SipSubscribe.Event errorEvent, SipSubscribe.Event okEvent, Long timeout) throws SipException {
+        transmitRequestWithResult(ip, message, errorEvent, okEvent, timeout);
+    }
+
+    public boolean transmitRequestWithResult(String ip, Message message, SipSubscribe.Event errorEvent, SipSubscribe.Event okEvent) throws SipException {
+        return transmitRequestWithResult(ip, message, errorEvent, okEvent, null);
+    }
+
+    public boolean transmitRequestWithResult(String ip, Message message, SipSubscribe.Event errorEvent, SipSubscribe.Event okEvent, Long timeout) throws SipException {
         ViaHeader viaHeader = (ViaHeader) message.getHeader(ViaHeader.NAME);
         String transport = "UDP";
         if (viaHeader == null) {
@@ -115,7 +123,8 @@ public class SIPSender {
                 SipProviderImpl tcpSipProvider = sipLayer.getTcpSipProvider(ip);
                 if (tcpSipProvider == null) {
                     log.error("[发送信息失败] 未找到tcp://{}的监听信息", ip);
-                    return;
+                    sipSubscribe.removeSubscribe(key);
+                    return false;
                 }
                 if (message instanceof Request) {
                     tcpSipProvider.sendRequest((Request) message);
@@ -127,18 +136,24 @@ public class SIPSender {
                 SipProviderImpl sipProvider = sipLayer.getUdpSipProvider(ip);
                 if (sipProvider == null) {
                     log.error("[发送信息失败] 未找到udp://{}的监听信息", ip);
-                    return;
+                    sipSubscribe.removeSubscribe(key);
+                    return false;
                 }
                 if (message instanceof Request) {
                     sipProvider.sendRequest((Request) message);
                 } else if (message instanceof Response) {
                     sipProvider.sendResponse((Response) message);
                 }
+            } else {
+                log.error("[发送信息失败] 不支持的传输协议: {}", transport);
+                sipSubscribe.removeSubscribe(key);
+                return false;
             }
         }catch (SipException e) {
             sipSubscribe.removeSubscribe(key);
             throw e;
         }
+        return true;
     }
 
     public CallIdHeader getNewCallIdHeader(String ip, String transport) {

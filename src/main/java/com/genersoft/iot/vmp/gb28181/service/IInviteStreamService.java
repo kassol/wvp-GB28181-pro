@@ -39,6 +39,16 @@ public interface IInviteStreamService {
      */
     void removeInviteInfoByDeviceAndChannel(InviteSessionType inviteSessionType, Integer channelId);
 
+    /**
+     * 删除点播状态信息，仅当其SSRC与期望值一致时才删除。
+     * 用于异步失败/超时回调：避免旧会话的回调误删同通道新建立会话的状态。
+     *
+     * @param stream       会话对应的流ID，用于精确定位记录（回放/下载同通道可能存在多条记录）
+     * @param expectedSsrc 期望的SSRC，为null时拒绝删除
+     * @return 是否执行了删除
+     */
+    boolean removeInviteInfoIfSsrcMatches(InviteSessionType type, Integer channelId, String stream, String expectedSsrc);
+
     List<InviteInfo> getAllInviteInfo();
 
     /**
