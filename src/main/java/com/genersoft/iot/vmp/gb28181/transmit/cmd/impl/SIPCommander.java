@@ -481,6 +481,9 @@ public class SIPCommander implements ISIPCommander {
             SIPResponse response = (SIPResponse) responseEvent.getResponse();
             String contentString =new String(response.getRawContent());
             String ssrc = SipUtils.getSsrcFromSdp(contentString);
+            if (ObjectUtils.isEmpty(ssrc)) {
+                ssrc = ssrcInfo.getSsrc();
+            }
             SsrcTransaction ssrcTransaction = SsrcTransaction.buildForDevice(device.getDeviceId(), channel.getId(),
                     response.getCallIdHeader().getCallId(), ssrcInfo.getApp(), ssrcInfo.getStream(), ssrc,
                     mediaServerItem.getId(), response, InviteSessionType.DOWNLOAD);
