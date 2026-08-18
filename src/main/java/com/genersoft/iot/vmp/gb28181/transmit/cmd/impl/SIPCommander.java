@@ -43,6 +43,8 @@ import javax.sip.header.CallIdHeader;
 import javax.sip.message.Request;
 import java.text.ParseException;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @description:设备能力接口，用于定义设备的控制、查询能力
@@ -53,6 +55,8 @@ import java.util.List;
 @DependsOn("sipLayer")
 @Slf4j
 public class SIPCommander implements ISIPCommander {
+
+    private final Set<String> byeInFlight = ConcurrentHashMap.newKeySet();
 
     @Autowired
     private SipConfig sipConfig;
@@ -572,10 +576,25 @@ public class SIPCommander implements ISIPCommander {
             throw new SsrcTransactionNotFoundException(device.getDeviceId(), channelId, callId, stream);
         }
 
-        log.info("[发送BYE] 设备： device: {}, channel: {}, callId: {}", device.getDeviceId(), channelId, ssrcTransaction.getCallId());
-        sessionManager.removeByCallId(ssrcTransaction.getCallId());
-        Request byteRequest = headerProvider.createByteRequest(device, channelId, ssrcTransaction.getSipTransactionInfo());
-        sipSender.transmitRequest(sipLayer.getLocalIp(device.getLocalIp()), byteRequest, null, okEvent);
+        String transactionCallId = ssrcTransaction.getCallId();
+        if (transactionCallId == null) {
+            throw new SipException("事务信息缺少Call-ID");
+        }
+        if (!byeInFlight.add(transactionCallId)) {
+            log.info("[发送BYE] 会话正在停止, callId: {}", transactionCallId);
+            throw new SipException("会话正在停止");
+        }
+        try {
+            log.info("[发送BYE] 设备： device: {}, channel: {}, callId: {}", device.getDeviceId(), channelId, transactionCallId);
+            Request byteRequest = headerProvider.createByteRequest(device, channelId, ssrcTransaction.getSipTransactionInfo());
+            boolean transmitted = sipSender.transmitRequestWithResult(sipLayer.getLocalIp(device.getLocalIp()), byteRequest, null, okEvent);
+            if (!transmitted) {
+                throw new SipException("未找到可用的SIP Provider");
+            }
+            sessionManager.removeByCallId(transactionCallId);
+        } finally {
+            byeInFlight.remove(transactionCallId);
+        }
     }
 
     @Override
