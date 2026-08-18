@@ -4,6 +4,7 @@ import com.genersoft.iot.vmp.common.enums.MediaStreamUtil;
 import com.genersoft.iot.vmp.conf.UserSetting;
 import com.genersoft.iot.vmp.conf.exception.ControllerException;
 import com.genersoft.iot.vmp.gb28181.service.ISourceOtherService;
+import com.genersoft.iot.vmp.gb28181.service.impl.OrphanRtpCleanupService;
 import com.genersoft.iot.vmp.media.bean.MediaServer;
 import com.genersoft.iot.vmp.media.bean.ResultForOnPublish;
 import com.genersoft.iot.vmp.media.zlm.dto.StreamAuthorityInfo;
@@ -39,6 +40,8 @@ public class MediaServiceImpl implements IMediaService {
 
     private final IRecordPlanService recordPlanService;
 
+    private final OrphanRtpCleanupService orphanRtpCleanupService;
+
     private final Map<String, ISourceOtherService> sourceOtherServiceMap;
 
 
@@ -61,7 +64,12 @@ public class MediaServiceImpl implements IMediaService {
     public ResultForOnPublish authenticatePublish(MediaServer mediaServer, String app, String stream, String params) {
 
         if (MediaStreamUtil.RTP_APP.equals(app)) {
-            return receiveRtpServerService.getAuthenticateInfo(stream);
+            ResultForOnPublish authenticateInfo = receiveRtpServerService.getAuthenticateInfo(stream);
+            if (authenticateInfo == null) {
+                // 鉴权失败说明这路RTP推流已不属于任何点播会话，尝试为其补发BYE以停止残留推流
+                orphanRtpCleanupService.onRtpPublishRejected(mediaServer.getId(), stream);
+            }
+            return authenticateInfo;
         }else {
             ResultForOnPublish result = new ResultForOnPublish();
             // app 非 RTP_APP 的流， 如果是国标对讲或者广播则默认获取声音并且不录制， 其他的流先查询是否有代理配置，如果没有代理配置再进行鉴权
